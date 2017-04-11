@@ -1004,10 +1004,9 @@ instance Storable WindowAttributes where
 foreign import ccall unsafe "XlibExtras.h XGetWindowAttributes"
     xGetWindowAttributes :: Display -> Window -> Ptr (WindowAttributes) -> IO Status
 
-getWindowAttributes :: Display -> Window -> IO WindowAttributes
-getWindowAttributes d w = alloca $ \p -> do
-    _ <- throwIfZero "getWindowAttributes" $ xGetWindowAttributes d w p
-    peek p
+getWindowAttributes :: Display -> Window -> IO (MayFail WindowAttributes)
+getWindowAttributes d w = alloca $ \p ->
+    guardNotZero "getWindowAttributes" (xGetWindowAttributes d w p) $ peek p
 
 -- | interface to the X11 library function @XChangeWindowAttributes()@.
 foreign import ccall unsafe "XlibExtras.h XChangeWindowAttributes"

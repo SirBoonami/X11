@@ -44,18 +44,20 @@ data XineramaScreenInfo = XineramaScreenInfo
 -- | Wrapper around xineramaQueryScreens that fakes a single screen when
 -- Xinerama is not active. This is the preferred interface to
 -- Graphics.X11.Xinerama.
-getScreenInfo :: Display -> IO [Rectangle]
+getScreenInfo :: Display -> IO (MayFail [Rectangle])
 getScreenInfo dpy = do
     mxs <- xineramaQueryScreens dpy
     case mxs of
-        Just xs -> return . map xsiToRect $ xs
+        Just xs -> return . Right . map xsiToRect $ xs
         Nothing -> do
-            wa <- getWindowAttributes dpy (defaultRootWindow dpy)
-            return $ [Rectangle
-                        { rect_x      = fromIntegral $ wa_x wa
-                        , rect_y      = fromIntegral $ wa_y wa
-                        , rect_width  = fromIntegral $ wa_width wa
-                        , rect_height = fromIntegral $ wa_height wa }]
+            mwa <- getWindowAttributes dpy (defaultRootWindow dpy)
+            case mwa of
+                Left  e  -> return $ Left e
+                Right wa -> return $ Right $ [Rectangle
+                                { rect_x      = fromIntegral $ wa_x wa
+                                , rect_y      = fromIntegral $ wa_y wa
+                                , rect_width  = fromIntegral $ wa_width wa
+                                , rect_height = fromIntegral $ wa_height wa }]
  where
     xsiToRect xsi = Rectangle
                     { rect_x        = fromIntegral $ xsi_x_org xsi
@@ -104,10 +106,10 @@ xineramaQueryVersion dpy = wrapPtr2 (cXineramaQueryVersion dpy) go
         go True major minor = Just (fromIntegral major, fromIntegral minor)
 
 xineramaQueryScreens :: Display -> IO (Maybe [XineramaScreenInfo])
-xineramaQueryScreens dpy = 
+xineramaQueryScreens dpy =
   withPool $ \pool -> do intp <- pooledMalloc pool
                          p <- cXineramaQueryScreens dpy intp
-                         if p == nullPtr 
+                         if p == nullPtr
                             then return Nothing
                             else do nscreens <- peek intp
                                     screens <- peekArray (fromIntegral nscreens) p

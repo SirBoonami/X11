@@ -77,12 +77,12 @@ foreign import ccall unsafe "HsXlib.h XQueryFont"
 -- steaming shit.
 
 -- | interface to the X11 library function @XGetGCValues()@.
-fontFromGC :: Display -> GC -> IO Font
+fontFromGC :: Display -> GC -> IO (MayFail Font)
 fontFromGC display gc =
 	allocaBytes #{size XGCValues} $ \ values -> do
-	throwIfZero "fontFromGC" $
+	guardNotZero "fontFromGC" (
 		xGetGCValues display gc #{const GCFont} values
-	#{peek XGCValues,font} values
+		) $ #{peek XGCValues,font} values
 foreign import ccall unsafe "HsXlib.h XGetGCValues"
 	xGetGCValues :: Display -> GC -> ValueMask -> Ptr GCValues -> IO CInt
 

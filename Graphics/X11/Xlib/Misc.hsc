@@ -932,13 +932,14 @@ foreign import ccall unsafe "HsXlib.h XLookupString"
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XGetIconName()@.
-getIconName :: Display -> Window -> IO String
+getIconName :: Display -> Window -> IO (MayFail String)
 getIconName display w =
-        alloca $ \ icon_name_return -> do
-        throwIfZero "getIconName" $
+        alloca $ \ icon_name_return ->
+        guardNotZero "getIconName" (
                 xGetIconName display w icon_name_return
-        c_icon_name <- peek icon_name_return
-        peekCString c_icon_name
+            ) $ do
+                    c_icon_name <- peek icon_name_return
+                    peekCString c_icon_name
 foreign import ccall unsafe "HsXlib.h XGetIconName"
         xGetIconName :: Display -> Window -> Ptr CString -> IO Status
 
@@ -1216,20 +1217,22 @@ foreign import ccall unsafe "HsXlib.h XDrawImageString"
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XStoreBuffer()@.
-storeBuffer :: Display -> String -> CInt -> IO ()
+storeBuffer :: Display -> String -> CInt -> IO (MayFail ())
 storeBuffer display bytes buffer =
         withCStringLen bytes $ \ (c_bytes, nbytes) ->
-        throwIfZero "storeBuffer" $
+        guardNotZero "storeBuffer" (
                 xStoreBuffer display c_bytes (fromIntegral nbytes) buffer
+            ) $ return ()
 foreign import ccall unsafe "HsXlib.h XStoreBuffer"
         xStoreBuffer :: Display -> CString -> CInt -> CInt -> IO Status
 
 -- | interface to the X11 library function @XStoreBytes()@.
-storeBytes :: Display -> String -> IO ()
+storeBytes :: Display -> String -> IO (MayFail ())
 storeBytes display bytes =
         withCStringLen bytes $ \ (c_bytes, nbytes) ->
-        throwIfZero "storeBytes" $
+        guardNotZero "storeBytes" (
                 xStoreBytes display c_bytes (fromIntegral nbytes)
+            ) $ return ()
 foreign import ccall unsafe "HsXlib.h XStoreBytes"
         xStoreBytes :: Display -> CString -> CInt -> IO Status
 
@@ -1260,10 +1263,11 @@ foreign import ccall unsafe "HsXlib.h XFetchBytes"
         xFetchBytes :: Display -> Ptr CInt -> IO CString
 
 -- | interface to the X11 library function @XRotateBuffers()@.
-rotateBuffers :: Display -> CInt -> IO ()
+rotateBuffers :: Display -> CInt -> IO (MayFail ())
 rotateBuffers display rot =
-        throwIfZero "rotateBuffers" $
+        guardNotZero "rotateBuffers" (
                 xRotateBuffers display rot
+            ) $ return ()
 foreign import ccall unsafe "HsXlib.h XRotateBuffers"
         xRotateBuffers :: Display -> CInt -> IO Status
 

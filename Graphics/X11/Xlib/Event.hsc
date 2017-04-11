@@ -485,10 +485,11 @@ foreign import ccall unsafe "HsXlib.h XSelectInput"
         selectInput :: Display -> Window -> EventMask -> IO ()
 
 -- | interface to the X11 library function @XSendEvent()@.
-sendEvent :: Display -> Window -> Bool -> EventMask -> XEventPtr -> IO ()
+sendEvent :: Display -> Window -> Bool -> EventMask -> XEventPtr -> IO (MayFail ())
 sendEvent display w propagate event_mask event_send =
-        throwIfZero "sendEvent" $
+        guardNotZero "sendEvent" (
                 xSendEvent display w propagate event_mask event_send
+            ) $ return ()
 foreign import ccall unsafe "HsXlib.h XSendEvent"
         xSendEvent :: Display -> Window -> Bool -> EventMask ->
                 XEventPtr -> IO Status

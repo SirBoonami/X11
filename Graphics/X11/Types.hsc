@@ -628,6 +628,11 @@ module Graphics.X11.Types
         Status,
         throwIfZero,
 
+        -- ** Exception safety
+        MayFail,
+        guardNotZero,
+        safely,
+
         -- ** WindowClass
         WindowClass,
         copyFromParent,
@@ -841,6 +846,7 @@ module Graphics.X11.Types
         ) where
 
 -- import Data.Int
+import Control.Exception
 import Data.Word
 import Foreign.Marshal.Error
 import Foreign.C.Types
@@ -1514,10 +1520,29 @@ type ErrorCode          = CInt
 
 type Status             = CInt
 
+type MayFail a          = Either String a
+
 -- |Xlib functions with return values of type @Status@ return zero on
 -- failure and nonzero on success.
 throwIfZero :: String -> IO Status -> IO ()
 throwIfZero fn_name = throwIf_ (== 0) (const ("Error in function " ++ fn_name))
+{-# DEPRECATED throwIfZero "Use guardNotZero instead." #-}
+
+-- |If the first action returns zero, return the given error string. If not, run
+-- the second one.
+guardNotZero :: String -> IO Status -> IO a -> IO (MayFail a)
+guardNotZero str grd act = grd
+                       >>= \r -> if r == 0
+                                    then return $ Left
+                                                $ "Error in function " ++ str
+                                    else return <$> act
+
+-- |Safe wrapper for functions that throw exceptions.
+safely :: IO a -> IO (MayFail a)
+safely a = either convert return <$> try a
+    where
+        convert :: SomeException -> MayFail a
+        convert = fail . show
 
 type WindowClass        = CInt
 #{enum WindowClass,
