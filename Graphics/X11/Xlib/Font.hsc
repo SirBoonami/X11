@@ -35,7 +35,7 @@ module Graphics.X11.Xlib.Font(
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Types
 
-import Foreign (Ptr, Int32, alloca, allocaBytes, peekByteOff, Word16, #{type unsigned long}, peek, throwIfNull)
+import Foreign (Ptr, Int32, alloca, allocaBytes, peekByteOff, Word16, #{type unsigned long}, peek)
 import Foreign.C
 
 import System.IO.Unsafe
@@ -89,11 +89,11 @@ foreign import ccall unsafe "HsXlib.h XGetGCValues"
 type ValueMask = #{type unsigned long}
 
 -- | interface to the X11 library function @XLoadQueryFont()@.
-loadQueryFont :: Display -> String -> IO FontStruct
+loadQueryFont :: Display -> String -> IO (MayFail FontStruct)
 loadQueryFont display name =
-	withCString name $ \ c_name -> do
-	fs <- throwIfNull "loadQueryFont" $ xLoadQueryFont display c_name
-	return (FontStruct fs)
+	withCString name $ \ c_name ->
+	guardNotNull "loadQueryFont" (xLoadQueryFont display c_name)
+	    $ return . FontStruct
 foreign import ccall unsafe "HsXlib.h XLoadQueryFont"
 	xLoadQueryFont :: Display -> CString -> IO (Ptr FontStruct)
 

@@ -25,7 +25,7 @@ import Graphics.X11.XScreenSaver
 import Graphics.X11.Xlib
 import Graphics.X11.Xlib.Internal
 import Graphics.X11.Xlib.Types
-import Foreign (Storable, Ptr, peek, poke, peekElemOff, pokeElemOff, peekByteOff, pokeByteOff, peekArray, throwIfNull, nullPtr, sizeOf, alignment, alloca, with, throwIf, Word8, Word16, #{type unsigned long}, Int32, plusPtr, castPtr, withArrayLen, setBit, testBit, allocaBytes, FunPtr)
+import Foreign (Storable, Ptr, peek, poke, peekElemOff, pokeElemOff, peekByteOff, pokeByteOff, peekArray, nullPtr, sizeOf, alignment, alloca, with, Word8, Word16, #{type unsigned long}, Int32, plusPtr, castPtr, withArrayLen, setBit, testBit, allocaBytes, FunPtr)
 import Foreign.C.Types
 import Foreign.C.String
 import Control.Monad
@@ -1042,28 +1042,29 @@ instance Storable TextProperty where
 foreign import ccall unsafe "XlibExtras.h XGetTextProperty"
     xGetTextProperty :: Display -> Window -> Ptr TextProperty -> Atom -> IO Status
 
-getTextProperty :: Display -> Window -> Atom -> IO TextProperty
+getTextProperty :: Display -> Window -> Atom -> IO (MayFail TextProperty)
 getTextProperty d w a =
-    alloca $ \textp -> do
-        _ <- throwIf (0==) (const "getTextProperty") $ xGetTextProperty d w textp a
-        peek textp
+    alloca $ \textp ->
+        guardNotZero "getTextProperty" (xGetTextProperty d w textp a)
+            $ peek textp
 
 foreign import ccall unsafe "XlibExtras.h XwcTextPropertyToTextList"
     xwcTextPropertyToTextList :: Display -> Ptr TextProperty -> Ptr (Ptr CWString) -> Ptr CInt -> IO CInt
 
-wcTextPropertyToTextList :: Display -> TextProperty -> IO [String]
+wcTextPropertyToTextList :: Display -> TextProperty -> IO (MayFail [String])
 wcTextPropertyToTextList d prop =
     alloca    $ \listp  ->
     alloca    $ \countp ->
     with prop $ \propp  -> do
-        _ <- throwIf (success>) (const "wcTextPropertyToTextList") $
-            xwcTextPropertyToTextList d propp listp countp
-        count <- peek countp
-        list  <- peek listp
-        texts <- flip mapM [0..fromIntegral count - 1] $ \i ->
-                     peekElemOff list i >>= peekCWString
-        wcFreeStringList list
-        return texts
+        guard_ (success<=) "wcTextPropertyToTextList" (
+                xwcTextPropertyToTextList d propp listp countp
+            ) $ \_ -> do
+                count <- peek countp
+                list  <- peek listp
+                texts <- flip mapM [0..fromIntegral count - 1] $ \i ->
+                             peekElemOff list i >>= peekCWString
+                wcFreeStringList list
+                return texts
 
 foreign import ccall unsafe "XlibExtras.h XwcFreeStringList"
     wcFreeStringList :: Ptr CWString -> IO ()
@@ -1074,21 +1075,22 @@ newtype FontSet = FontSet (Ptr FontSet)
 foreign import ccall unsafe "XlibExtras.h XCreateFontSet"
     xCreateFontSet :: Display -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CString -> IO (Ptr FontSet)
 
-createFontSet :: Display -> String -> IO ([String], String, FontSet)
+createFontSet :: Display -> String -> IO (MayFail ([String], String, FontSet))
 createFontSet d fn =
     withCString fn $ \fontp  ->
     alloca         $ \listp  ->
     alloca         $ \countp ->
-    alloca         $ \defp   -> do
-        fs      <- throwIfNull "createFontSet" $
-                       xCreateFontSet d fontp listp countp defp
-        count   <- peek countp
-        list    <- peek listp
-        missing <- flip mapM [0..fromIntegral count - 1] $ \i ->
-                       peekElemOff list i >>= peekCString
-        def     <- peek defp >>= peekCString
-        freeStringList list
-        return (missing, def, FontSet fs)
+    alloca         $ \defp   ->
+        guardNotNull "createFontSet" (
+                xCreateFontSet d fontp listp countp defp
+            ) $ \fs -> do
+                count   <- peek countp
+                list    <- peek listp
+                missing <- flip mapM [0..fromIntegral count - 1] $ \i ->
+                               peekElemOff list i >>= peekCString
+                def     <- peek defp >>= peekCString
+                freeStringList list
+                return (missing, def, FontSet fs)
 
 foreign import ccall unsafe "XlibExtras.h XFreeStringList"
     freeStringList :: Ptr CString -> IO ()
@@ -1699,19 +1701,21 @@ foreign import ccall unsafe "HsXlib.h XMapRaised"
 foreign import ccall unsafe "HsXlib.h XGetCommand"
     xGetCommand :: Display -> Window -> Ptr (Ptr CWString) -> Ptr CInt -> IO Status
 
-getCommand :: Display -> Window -> IO [String]
+getCommand :: Display -> Window -> IO (MayFail [String])
 getCommand d w =
   alloca $
   \argvp ->
   alloca $
   \argcp ->
   do
-    _ <- throwIf (success >) (\status -> "xGetCommand returned status: " ++ show status) $ xGetCommand d w argvp argcp
-    argc <- peek argcp
-    argv <- peek argvp
-    texts <- flip mapM [0 .. fromIntegral $ pred argc] $ \i -> peekElemOff argv i >>= peekCWString
-    wcFreeStringList argv
-    return texts
+    guard' (success>=) (\status -> "xGetCommand returned status: " ++ show status)
+        (xGetCommand d w argvp argcp) $ const $ do
+            argc <- peek argcp
+            argv <- peek argvp
+            texts <- flip mapM [0 .. fromIntegral $ pred argc]
+                   $ \i -> peekElemOff argv i >>= peekCWString
+            wcFreeStringList argv
+            return texts
 
 foreign import ccall unsafe "HsXlib.h XGetModifierMapping"
     xGetModifierMapping :: Display -> IO (Ptr ())

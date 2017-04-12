@@ -186,7 +186,7 @@ import Graphics.X11.Xlib.Event
 import Graphics.X11.Xlib.Font
 import Graphics.X11.Xlib.Internal
 
-import Foreign (Storable, Ptr, alloca, peek, throwIfNull, with, withArrayLen, allocaBytes, pokeByteOff, withArray, FunPtr, nullPtr, Word32, peekArray)
+import Foreign (Storable, Ptr, alloca, peek, with, withArrayLen, allocaBytes, pokeByteOff, withArray, FunPtr, nullPtr, Word32, peekArray)
 import Foreign.C
 
 import System.IO.Unsafe
@@ -1237,28 +1237,30 @@ foreign import ccall unsafe "HsXlib.h XStoreBytes"
         xStoreBytes :: Display -> CString -> CInt -> IO Status
 
 -- | interface to the X11 library function @XFetchBuffer()@.
-fetchBuffer :: Display -> CInt -> IO String
+fetchBuffer :: Display -> CInt -> IO (MayFail String)
 fetchBuffer display buffer =
         alloca $ \ nbytes_return -> do
-        c_bytes <- throwIfNull "fetchBuffer" $
+        guardNotNull "fetchBuffer" (
                 xFetchBuffer display nbytes_return buffer
-        nbytes <- peek nbytes_return
-        bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
-        _ <- xFree c_bytes
-        return bytes
+            ) $ \c_bytes -> do
+                    nbytes <- peek nbytes_return
+                    bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
+                    _ <- xFree c_bytes
+                    return bytes
 foreign import ccall unsafe "HsXlib.h XFetchBuffer"
         xFetchBuffer :: Display -> Ptr CInt -> CInt -> IO CString
 
 -- | interface to the X11 library function @XFetchBytes()@.
-fetchBytes :: Display -> IO String
+fetchBytes :: Display -> IO (MayFail String)
 fetchBytes display =
         alloca $ \ nbytes_return -> do
-        c_bytes <- throwIfNull "fetchBytes" $
+        guardNotNull "fetchBytes" (
                 xFetchBytes display nbytes_return
-        nbytes <- peek nbytes_return
-        bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
-        _ <- xFree c_bytes
-        return bytes
+            ) $ \c_bytes -> do
+                    nbytes <- peek nbytes_return
+                    bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
+                    _ <- xFree c_bytes
+                    return bytes
 foreign import ccall unsafe "HsXlib.h XFetchBytes"
         xFetchBytes :: Display -> Ptr CInt -> IO CString
 

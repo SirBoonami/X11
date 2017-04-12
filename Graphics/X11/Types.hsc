@@ -630,7 +630,10 @@ module Graphics.X11.Types
 
         -- ** Exception safety
         MayFail,
+        guard',
+        guard_,
         guardNotZero,
+        guardNotNull,
         safely,
 
         -- ** WindowClass
@@ -850,6 +853,7 @@ import Control.Exception
 import Data.Word
 import Foreign.Marshal.Error
 import Foreign.C.Types
+import Foreign.Ptr
 
 #include "HsXlib.h"
 
@@ -1528,14 +1532,30 @@ throwIfZero :: String -> IO Status -> IO ()
 throwIfZero fn_name = throwIf_ (== 0) (const ("Error in function " ++ fn_name))
 {-# DEPRECATED throwIfZero "Use guardNotZero instead." #-}
 
--- |If the first action returns zero, return the given error string. If not, run
--- the second one.
+-- |Ensure that a condition is met before continuing. Fail with an error message
+-- otherwise.
+guard' :: (a -> Bool) -> (a -> String) -> IO a -> (a -> IO b) -> IO (MayFail b)
+guard' gf fstr ga act = do
+    g <- ga
+    if gf g
+       then Right <$> act g
+       else return $ Left $ fstr g
+
+-- |Ensure that a condition is met before continuing. Fail with an error message
+-- otherwise. Uses a constant error string.
+guard_ :: (a -> Bool) -> String -> IO a -> (a -> IO b) -> IO (MayFail b)
+guard_ gf str = guard' gf (const str)
+
+-- |Ensure that the first function doesn't return zero.
 guardNotZero :: String -> IO Status -> IO a -> IO (MayFail a)
-guardNotZero str grd act = grd
-                       >>= \r -> if r == 0
-                                    then return $ Left
-                                                $ "Error in function " ++ str
-                                    else return <$> act
+guardNotZero str grd act = guard_ (/= 0)
+                                  ("return value 0 from function " ++ str)
+                                  grd
+                                $ const act
+
+-- |Ensure that the first function doesn't return a null pointer.
+guardNotNull :: String -> IO (Ptr a) -> (Ptr a -> IO b) -> IO (MayFail b)
+guardNotNull str = guard_ (/= nullPtr) ("null pointer from function " ++ str)
 
 -- |Safe wrapper for functions that throw exceptions.
 safely :: IO a -> IO (MayFail a)

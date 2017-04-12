@@ -53,7 +53,7 @@ module Graphics.X11.Xlib.Display(
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Types
 
-import Foreign (throwIfNull, Ptr)
+import Foreign (Ptr)
 import Foreign.C
 
 import System.IO.Unsafe
@@ -210,11 +210,10 @@ foreign import ccall unsafe "HsXlib.h XNoOp"
         noOp                    :: Display -> IO ()
 
 -- | interface to the X11 library function @XOpenDisplay()@.
-openDisplay :: String -> IO Display
+openDisplay :: String -> IO (MayFail Display)
 openDisplay name =
-        withCString name $ \ c_name -> do
-        display <- throwIfNull "openDisplay" (xOpenDisplay c_name)
-        return (Display display)
+        withCString name $ \ c_name ->
+        guardNotNull "openDisplay" (xOpenDisplay c_name) $ return . Display
 foreign import ccall unsafe "HsXlib.h XOpenDisplay"
         xOpenDisplay :: CString -> IO (Ptr Display)
 

@@ -25,7 +25,7 @@ module Graphics.X11.Xlib.Image(
 import Graphics.X11.Types
 import Graphics.X11.Xlib.Types
 
-import Foreign (Ptr, throwIfNull)
+import Foreign (Ptr)
 import Foreign.C.Types
 
 import System.IO.Unsafe (unsafePerformIO)
@@ -35,10 +35,10 @@ import System.IO.Unsafe (unsafePerformIO)
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XCreateImage()@.
-createImage :: Display -> Visual -> CInt -> ImageFormat -> CInt -> Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> IO Image
-createImage display vis depth format offset dat width height bitmap_pad bytes_per_line = do
-    image <- throwIfNull "createImage" (xCreateImage display vis depth format offset dat width height bitmap_pad bytes_per_line)
-    return (Image image)
+createImage :: Display -> Visual -> CInt -> ImageFormat -> CInt -> Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> IO (MayFail Image)
+createImage display vis depth format offset dat width height bitmap_pad bytes_per_line =
+    guardNotNull "createImage" (xCreateImage display vis depth format offset dat width height bitmap_pad bytes_per_line)
+        $ return . Image
 foreign import ccall unsafe "HsXlib.h XCreateImage"
     xCreateImage :: Display -> Visual -> CInt -> ImageFormat -> CInt ->
         Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> IO (Ptr Image)
@@ -53,10 +53,10 @@ foreign import ccall unsafe "HsXlib.h XDestroyImage"
     destroyImage :: Image -> IO ()
 
 -- | interface to the X11 library function @XGetImage()@.
-getImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> IO Image
-getImage display d x y width height plane_mask format = do
-    image <- throwIfNull "getImage" (xGetImage display d x y width height plane_mask format)
-    return (Image image)
+getImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> IO (MayFail Image)
+getImage display d x y width height plane_mask format =
+    guardNotNull "getImage" (xGetImage display d x y width height plane_mask format)
+        $ return . Image
 
 foreign import ccall unsafe "HsXlib.h XGetImage"
     xGetImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> IO (Ptr Image)
