@@ -635,6 +635,7 @@ module Graphics.X11.Types
         guardNotZero,
         guardNotNull,
         safely,
+        mayNotFail,
 
         -- ** WindowClass
         WindowClass,
@@ -1563,6 +1564,11 @@ safely a = either convert return <$> try a
     where
         convert :: SomeException -> MayFail a
         convert = fail . show
+
+-- |Unwrap calls known to be safe. Careful!
+mayNotFail :: MayFail a -> a
+mayNotFail (Right a  ) = a
+mayNotFail (Left  err) = error $ "mayNotFail: " ++ err
 
 type WindowClass        = CInt
 #{enum WindowClass,

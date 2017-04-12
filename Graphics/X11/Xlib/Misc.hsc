@@ -296,9 +296,9 @@ foreign import ccall unsafe "HsXlib.h XUngrabServer"
 
 -- | interface to the X11 library function @XQueryBestTile()@.
 queryBestTile    :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (Dimension, Dimension)
+                        IO (MayFail (Dimension, Dimension))
 queryBestTile display which_screen width height =
-        outParameters2 (throwIfZero "queryBestTile") $
+        outParametersF2 (onZero "queryBestTile") $
                 xQueryBestTile display which_screen width height
 foreign import ccall unsafe "HsXlib.h XQueryBestTile"
         xQueryBestTile    :: Display -> Drawable -> Dimension -> Dimension ->
@@ -306,9 +306,9 @@ foreign import ccall unsafe "HsXlib.h XQueryBestTile"
 
 -- | interface to the X11 library function @XQueryBestStipple()@.
 queryBestStipple :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (Dimension, Dimension)
+                        IO (MayFail (Dimension, Dimension))
 queryBestStipple display which_screen width height =
-        outParameters2 (throwIfZero "queryBestStipple") $
+        outParametersF2 (onZero "queryBestStipple") $
                 xQueryBestStipple display which_screen width height
 foreign import ccall unsafe "HsXlib.h XQueryBestStipple"
         xQueryBestStipple :: Display -> Drawable -> Dimension -> Dimension ->
@@ -316,9 +316,9 @@ foreign import ccall unsafe "HsXlib.h XQueryBestStipple"
 
 -- | interface to the X11 library function @XQueryBestCursor()@.
 queryBestCursor  :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (Dimension, Dimension)
+                        IO (MayFail (Dimension, Dimension))
 queryBestCursor display d width height =
-        outParameters2 (throwIfZero "queryBestCursor") $
+        outParametersF2 (onZero "queryBestCursor") $
                 xQueryBestCursor display d width height
 foreign import ccall unsafe "HsXlib.h XQueryBestCursor"
         xQueryBestCursor  :: Display -> Drawable -> Dimension -> Dimension ->
@@ -326,9 +326,10 @@ foreign import ccall unsafe "HsXlib.h XQueryBestCursor"
 
 -- | interface to the X11 library function @XQueryBestSize()@.
 queryBestSize    :: Display -> QueryBestSizeClass -> Drawable ->
-                        Dimension -> Dimension -> IO (Dimension, Dimension)
+                        Dimension -> Dimension ->
+                        IO (MayFail (Dimension, Dimension))
 queryBestSize display shape_class which_screen width height =
-        outParameters2 (throwIfZero "queryBestSize") $
+        outParametersF2 (onZero "queryBestSize") $
                 xQueryBestSize display shape_class which_screen width height
 foreign import ccall unsafe "HsXlib.h XQueryBestSize"
         xQueryBestSize    :: Display -> QueryBestSizeClass -> Drawable ->
@@ -592,9 +593,9 @@ foreign import ccall unsafe "HsXlib.h XGeometry"
 
 -- | interface to the X11 library function @XGetGeometry()@.
 getGeometry :: Display -> Drawable ->
-        IO (Window, Position, Position, Dimension, Dimension, Dimension, CInt)
+        IO (MayFail (Window, Position, Position, Dimension, Dimension, Dimension, CInt))
 getGeometry display d =
-        outParameters7 (throwIfZero "getGeometry") $
+        outParametersF7 (onZero "getGeometry") $
                 xGetGeometry display d
 foreign import ccall unsafe "HsXlib.h XGetGeometry"
         xGetGeometry :: Display -> Drawable ->
@@ -646,7 +647,7 @@ type ScreenSaverMode = CInt
 
 getScreenSaver :: Display ->
         IO (CInt, CInt, PreferBlankingMode, AllowExposuresMode)
-getScreenSaver display = outParameters4 id (xGetScreenSaver display)
+getScreenSaver display = outParameters4 (xGetScreenSaver display)
 foreign import ccall unsafe "HsXlib.h XGetScreenSaver"
         xGetScreenSaver :: Display -> Ptr CInt -> Ptr CInt ->
                 Ptr PreferBlankingMode -> Ptr AllowExposuresMode -> IO ()
@@ -674,7 +675,7 @@ foreign import ccall unsafe "HsXlib.h XForceScreenSaver"
 
 -- | interface to the X11 library function @XGetPointerControl()@.
 getPointerControl :: Display -> IO (CInt, CInt, CInt)
-getPointerControl display = outParameters3 id (xGetPointerControl display)
+getPointerControl display = outParameters3 (xGetPointerControl display)
 foreign import ccall unsafe "HsXlib.h XGetPointerControl"
         xGetPointerControl :: Display -> Ptr CInt -> Ptr CInt -> Ptr CInt -> IO ()
 
@@ -860,7 +861,7 @@ foreign import ccall unsafe "X11/Xlib.h XReadBitmapFile"
 -- | interface to the X11 library function @XDisplayKeycodes()@.
 displayKeycodes :: Display -> (CInt,CInt)
 displayKeycodes display =
-        unsafePerformIO $ outParameters2 id $ xDisplayKeycodes display
+        unsafePerformIO $ outParameters2 $ xDisplayKeycodes display
 foreign import ccall unsafe "HsXlib.h XDisplayKeycodes"
         xDisplayKeycodes :: Display -> Ptr CInt -> Ptr CInt -> IO ()
 
@@ -1306,46 +1307,73 @@ foreign import ccall unsafe "HsXlib.h XSetTextProperty"
 ----------------------------------------------------------------
 
 outParameters2 :: (Storable a, Storable b) =>
-        (IO r -> IO ()) -> (Ptr a -> Ptr b -> IO r) -> IO (a,b)
-outParameters2 check fn =
+        (Ptr a -> Ptr b -> IO r) -> IO (a,b)
+outParameters2 fn = mayNotFail <$> outParametersF2 (const Nothing) fn
+
+outParametersF2 :: (Storable a, Storable b) =>
+        (r -> Maybe String) -> (Ptr a -> Ptr b -> IO r) -> IO (MayFail (a,b))
+outParametersF2 check fn =
         alloca $ \ a_return ->
         alloca $ \ b_return -> do
-        check (fn a_return b_return)
-        a <- peek a_return
-        b <- peek b_return
-        return (a,b)
+        r <- fn a_return b_return
+        case check r of
+            Just err -> return $ fail err
+            Nothing  -> do
+                a <- peek a_return
+                b <- peek b_return
+                return $ return (a,b)
 
 outParameters3 :: (Storable a, Storable b, Storable c) =>
-        (IO r -> IO ()) -> (Ptr a -> Ptr b -> Ptr c -> IO r) -> IO (a,b,c)
-outParameters3 check fn =
+        (Ptr a -> Ptr b -> Ptr c -> IO r) -> IO (a,b,c)
+outParameters3 fn = mayNotFail <$> outParametersF3 (const Nothing) fn
+
+outParametersF3 :: (Storable a, Storable b, Storable c) =>
+        (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> IO r) ->
+        IO (MayFail (a,b,c))
+outParametersF3 check fn =
         alloca $ \ a_return ->
         alloca $ \ b_return ->
         alloca $ \ c_return -> do
-        check (fn a_return b_return c_return)
-        a <- peek a_return
-        b <- peek b_return
-        c <- peek c_return
-        return (a,b,c)
+        r <- fn a_return b_return c_return
+        case check r of
+            Just err -> return $ fail err
+            Nothing  -> do
+                a <- peek a_return
+                b <- peek b_return
+                c <- peek c_return
+                return $ return (a,b,c)
 
 outParameters4 :: (Storable a, Storable b, Storable c, Storable d) =>
-        (IO r -> IO ()) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> IO r) ->
-        IO (a,b,c,d)
-outParameters4 check fn =
+        (Ptr a -> Ptr b -> Ptr c -> Ptr d -> IO r) -> IO (a,b,c,d)
+outParameters4 fn = mayNotFail <$> outParametersF4 (const Nothing) fn
+
+outParametersF4 :: (Storable a, Storable b, Storable c, Storable d) =>
+        (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> IO r) ->
+        IO (MayFail (a,b,c,d))
+outParametersF4 check fn =
         alloca $ \ a_return ->
         alloca $ \ b_return ->
         alloca $ \ c_return ->
         alloca $ \ d_return -> do
-        check (fn a_return b_return c_return d_return)
-        a <- peek a_return
-        b <- peek b_return
-        c <- peek c_return
-        d <- peek d_return
-        return (a,b,c,d)
+        r <- fn a_return b_return c_return d_return
+        case check r of
+            Just err -> return $ fail err
+            Nothing  -> do
+                a <- peek a_return
+                b <- peek b_return
+                c <- peek c_return
+                d <- peek d_return
+                return $ return (a,b,c,d)
 
 outParameters7 :: (Storable a, Storable b, Storable c, Storable d, Storable e, Storable f, Storable g) =>
-        (IO r -> IO ()) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> Ptr e -> Ptr f -> Ptr g -> IO r) ->
+        (Ptr a -> Ptr b -> Ptr c -> Ptr d -> Ptr e -> Ptr f -> Ptr g -> IO r) ->
         IO (a,b,c,d,e,f,g)
-outParameters7 check fn =
+outParameters7 fn = mayNotFail <$> outParametersF7 (const Nothing) fn
+
+outParametersF7 :: (Storable a, Storable b, Storable c, Storable d, Storable e, Storable f, Storable g) =>
+        (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> Ptr e -> Ptr f -> Ptr g -> IO r) ->
+        IO (MayFail (a,b,c,d,e,f,g))
+outParametersF7 check fn =
         alloca $ \ a_return ->
         alloca $ \ b_return ->
         alloca $ \ c_return ->
@@ -1353,15 +1381,24 @@ outParameters7 check fn =
         alloca $ \ e_return ->
         alloca $ \ f_return ->
         alloca $ \ g_return -> do
-        check (fn a_return b_return c_return d_return e_return f_return g_return)
-        a <- peek a_return
-        b <- peek b_return
-        c <- peek c_return
-        d <- peek d_return
-        e <- peek e_return
-        f <- peek f_return
-        g <- peek g_return
-        return (a,b,c,d,e,f,g)
+        r <- fn a_return b_return c_return d_return e_return f_return g_return
+        case check r of
+            Just err -> return $ fail err
+            Nothing  -> do
+                a <- peek a_return
+                b <- peek b_return
+                c <- peek c_return
+                d <- peek d_return
+                e <- peek e_return
+                f <- peek f_return
+                g <- peek g_return
+                return $ return (a,b,c,d,e,f,g)
+
+-- |Helper for @outParamsF*@. Returns `Just` the string if the status is zero
+-- and `Nothing` otherwise.
+onZero :: String -> Status -> Maybe String
+onZero s 0 = Just s
+onZero _ _ = Nothing
 
 ----------------------------------------------------------------
 -- End
