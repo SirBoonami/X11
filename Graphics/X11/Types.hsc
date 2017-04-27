@@ -629,13 +629,13 @@ module Graphics.X11.Types
         throwIfZero,
 
         -- ** Exception safety
-        MayFail,
-        guard',
-        guard_,
-        guardNotZero,
-        guardNotNull,
+        UnnamedMonad,
+        runUnnamedMonad,
+        guardUnnamed,
+        guardUnnamed_,
+        guardUnnamedNotZero,
+        guardUnnamedNotNull,
         safely,
-        mayNotFail,
 
         -- ** WindowClass
         WindowClass,
@@ -851,6 +851,7 @@ module Graphics.X11.Types
 
 -- import Data.Int
 import Control.Exception
+import Control.Monad.Except
 import Data.Word
 import Foreign.Marshal.Error
 import Foreign.C.Types
@@ -1525,50 +1526,51 @@ type ErrorCode          = CInt
 
 type Status             = CInt
 
-type MayFail a          = Either String a
-
 -- |Xlib functions with return values of type @Status@ return zero on
 -- failure and nonzero on success.
 throwIfZero :: String -> IO Status -> IO ()
 throwIfZero fn_name = throwIf_ (== 0) (const ("Error in function " ++ fn_name))
 {-# DEPRECATED throwIfZero "Use guardNotZero instead." #-}
 
+type UnnamedMonad = ExceptT String IO
+
+runUnnamedMonad :: UnnamedMonad a -> IO (Either String a)
+runUnnamedMonad = runExceptT
+
 -- |Ensure that a condition is met before continuing. Fail with an error message
 -- otherwise.
-guard' :: (a -> Bool) -> (a -> String) -> IO a -> (a -> IO b) -> IO (MayFail b)
-guard' gf fstr ga act = do
-    g <- ga
+guardUnnamed :: (a -> Bool) -> (a -> String) -> IO a
+             -> (a -> UnnamedMonad b) -> (UnnamedMonad b)
+guardUnnamed gf fstr ga act = do
+    g <- liftIO ga
     if gf g
-       then Right <$> act g
-       else return $ Left $ fstr g
+       then act g
+       else throwError $ fstr g
 
 -- |Ensure that a condition is met before continuing. Fail with an error message
 -- otherwise. Uses a constant error string.
-guard_ :: (a -> Bool) -> String -> IO a -> (a -> IO b) -> IO (MayFail b)
-guard_ gf str = guard' gf (const str)
+guardUnnamed_ :: (a -> Bool) -> String -> IO a
+              -> (a -> UnnamedMonad b) -> UnnamedMonad b
+guardUnnamed_ gf str = guardUnnamed gf (const str)
 
 -- |Ensure that the first function doesn't return zero.
-guardNotZero :: String -> IO Status -> IO a -> IO (MayFail a)
-guardNotZero str grd act = guard_ (/= 0)
-                                  ("return value 0 from function " ++ str)
-                                  grd
-                                $ const act
+guardNotZero :: String -> IO Status -> UnnamedMonad a -> UnnamedMonad a
+guardNotZero str grd act = guardUnnamed_
+                                (/= 0)
+                                ("return value 0 from function " ++ str)
+                                grd
+                                (const act)
 
 -- |Ensure that the first function doesn't return a null pointer.
-guardNotNull :: String -> IO (Ptr a) -> (Ptr a -> IO b) -> IO (MayFail b)
-guardNotNull str = guard_ (/= nullPtr) ("null pointer from function " ++ str)
+guardNotNull :: String -> IO (Ptr a) -> (Ptr a -> UnnamedMonad b)
+             -> UnnamedMonad b
+guardNotNull str = guardUnnamed_
+                        (/= nullPtr)
+                        ("null pointer from function " ++ str)
 
 -- |Safe wrapper for functions that throw exceptions.
-safely :: IO a -> IO (MayFail a)
-safely a = either convert return <$> try a
-    where
-        convert :: SomeException -> MayFail a
-        convert = fail . show
-
--- |Unwrap calls known to be safe. Careful!
-mayNotFail :: MayFail a -> a
-mayNotFail (Right a  ) = a
-mayNotFail (Left  err) = error $ "mayNotFail: " ++ err
+safely :: IO a -> UnnamedMonad a
+safely a = ExceptT <$> try a
 
 type WindowClass        = CInt
 #{enum WindowClass,
