@@ -631,11 +631,14 @@ module Graphics.X11.Types
         -- ** Exception safety
         UnnamedMonad,
         runUnnamedMonad,
+        hoistUnnamedMonad,
+        liftIO,
         guardUnnamed,
         guardUnnamed_,
-        guardUnnamedNotZero,
-        guardUnnamedNotNull,
+        guardNotZero,
+        guardNotNull,
         safely,
+        hoistWrapper1,
 
         -- ** WindowClass
         WindowClass,
@@ -853,7 +856,7 @@ module Graphics.X11.Types
 import Control.Exception
 import Control.Monad.Except
 import Data.Word
-import Foreign.Marshal.Error
+import Foreign.Marshal.Error hiding (void)
 import Foreign.C.Types
 import Foreign.Ptr
 
@@ -1537,40 +1540,46 @@ type UnnamedMonad = ExceptT String IO
 runUnnamedMonad :: UnnamedMonad a -> IO (Either String a)
 runUnnamedMonad = runExceptT
 
+hoistUnnamedMonad :: IO (Either String a) -> UnnamedMonad a
+hoistUnnamedMonad = ExceptT
+
 -- |Ensure that a condition is met before continuing. Fail with an error message
 -- otherwise.
-guardUnnamed :: (a -> Bool) -> (a -> String) -> IO a
-             -> (a -> UnnamedMonad b) -> (UnnamedMonad b)
-guardUnnamed gf fstr ga act = do
+guardUnnamed :: (a -> Bool) -> (a -> String) -> IO a -> UnnamedMonad a
+guardUnnamed gf fstr ga = do
     g <- liftIO ga
     if gf g
-       then act g
+       then return g
        else throwError $ fstr g
 
 -- |Ensure that a condition is met before continuing. Fail with an error message
 -- otherwise. Uses a constant error string.
-guardUnnamed_ :: (a -> Bool) -> String -> IO a
-              -> (a -> UnnamedMonad b) -> UnnamedMonad b
+guardUnnamed_ :: (a -> Bool) -> String -> IO a -> UnnamedMonad a
 guardUnnamed_ gf str = guardUnnamed gf (const str)
 
--- |Ensure that the first function doesn't return zero.
-guardNotZero :: String -> IO Status -> UnnamedMonad a -> UnnamedMonad a
-guardNotZero str grd act = guardUnnamed_
+-- |Ensure that the function doesn't return zero.
+guardNotZero :: String -> IO Status -> UnnamedMonad ()
+guardNotZero str grd = void $ guardUnnamed_
                                 (/= 0)
                                 ("return value 0 from function " ++ str)
                                 grd
-                                (const act)
 
--- |Ensure that the first function doesn't return a null pointer.
-guardNotNull :: String -> IO (Ptr a) -> (Ptr a -> UnnamedMonad b)
-             -> UnnamedMonad b
+-- |Ensure that the function doesn't return a null pointer.
+guardNotNull :: String -> IO (Ptr a) -> UnnamedMonad (Ptr a)
 guardNotNull str = guardUnnamed_
                         (/= nullPtr)
                         ("null pointer from function " ++ str)
 
 -- |Safe wrapper for functions that throw exceptions.
 safely :: IO a -> UnnamedMonad a
-safely a = ExceptT <$> try a
+safely a = liftIO (try a)
+       >>= \r -> case r of
+                      Left ex -> throwError $ show (ex :: SomeException)
+                      Right x -> return x
+
+hoistWrapper1 :: ((a -> IO (Either String b)) -> IO (Either String b))
+              -> (a -> UnnamedMonad b) -> UnnamedMonad b
+hoistWrapper1 w f = hoistUnnamedMonad $ w $ runUnnamedMonad . f
 
 type WindowClass        = CInt
 #{enum WindowClass,

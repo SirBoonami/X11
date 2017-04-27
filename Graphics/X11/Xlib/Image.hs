@@ -35,10 +35,9 @@ import System.IO.Unsafe (unsafePerformIO)
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XCreateImage()@.
-createImage :: Display -> Visual -> CInt -> ImageFormat -> CInt -> Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> IO (MayFail Image)
+createImage :: Display -> Visual -> CInt -> ImageFormat -> CInt -> Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> UnnamedMonad Image
 createImage display vis depth format offset dat width height bitmap_pad bytes_per_line =
-    guardNotNull "createImage" (xCreateImage display vis depth format offset dat width height bitmap_pad bytes_per_line)
-        $ return . Image
+    fmap Image $ guardNotNull "createImage" (xCreateImage display vis depth format offset dat width height bitmap_pad bytes_per_line)
 foreign import ccall unsafe "HsXlib.h XCreateImage"
     xCreateImage :: Display -> Visual -> CInt -> ImageFormat -> CInt ->
         Ptr CChar -> Dimension -> Dimension -> CInt -> CInt -> IO (Ptr Image)
@@ -53,10 +52,9 @@ foreign import ccall unsafe "HsXlib.h XDestroyImage"
     destroyImage :: Image -> IO ()
 
 -- | interface to the X11 library function @XGetImage()@.
-getImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> IO (MayFail Image)
+getImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> UnnamedMonad Image
 getImage display d x y width height plane_mask format =
-    guardNotNull "getImage" (xGetImage display d x y width height plane_mask format)
-        $ return . Image
+    fmap Image $ guardNotNull "getImage" (xGetImage display d x y width height plane_mask format)
 
 foreign import ccall unsafe "HsXlib.h XGetImage"
     xGetImage :: Display -> Drawable -> CInt -> CInt -> CUInt -> CUInt -> CULong -> ImageFormat -> IO (Ptr Image)

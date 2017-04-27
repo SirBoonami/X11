@@ -41,60 +41,60 @@ import Foreign.C
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XLookupColor()@.
-lookupColor :: Display -> Colormap -> String -> IO (MayFail (Color, Color))
+lookupColor :: Display -> Colormap -> String -> UnnamedMonad (Color, Color)
 lookupColor display colormap color_name =
-        withCString color_name $ \c_color_name ->
-        alloca $ \ exact_def_return ->
-        alloca $ \ screen_def_return -> do
-        guardNotZero "lookupColor" (
-                xLookupColor display colormap c_color_name
+        hoistWrapper1 (withCString color_name) $ \c_color_name ->
+        hoistWrapper1 alloca $ \ exact_def_return ->
+        hoistWrapper1 alloca $ \ screen_def_return -> do
+        guardNotZero "lookupColor"
+                $ xLookupColor display colormap c_color_name
                         exact_def_return screen_def_return
-            ) $ do
-                    exact_def <- peek exact_def_return
-                    screen_def <- peek screen_def_return
-                    return (exact_def, screen_def)
+        liftIO $ do
+            exact_def <- peek exact_def_return
+            screen_def <- peek screen_def_return
+            return (exact_def, screen_def)
 
 foreign import ccall unsafe "HsXlib.h XLookupColor"
         xLookupColor :: Display -> Colormap -> CString ->
                 Ptr Color -> Ptr Color -> IO Status
 
 -- | interface to the X11 library function @XAllocNamedColor()@.
-allocNamedColor :: Display -> Colormap -> String -> IO (MayFail (Color, Color))
+allocNamedColor :: Display -> Colormap -> String -> UnnamedMonad (Color, Color)
 allocNamedColor display colormap color_name =
-        withCString color_name $ \c_color_name ->
-        alloca $ \ exact_def_return ->
-        alloca $ \ screen_def_return -> do
-        guardNotZero "allocNamedColor" (
-                xAllocNamedColor display colormap c_color_name
+        hoistWrapper1 (withCString color_name) $ \c_color_name ->
+        hoistWrapper1 alloca $ \ exact_def_return ->
+        hoistWrapper1 alloca $ \ screen_def_return -> do
+        guardNotZero "allocNamedColor"
+                $ xAllocNamedColor display colormap c_color_name
                         exact_def_return screen_def_return
-            ) $ do
-                    exact_def <- peek exact_def_return
-                    screen_def <- peek screen_def_return
-                    return (exact_def, screen_def)
+        liftIO $ do
+            exact_def <- peek exact_def_return
+            screen_def <- peek screen_def_return
+            return (exact_def, screen_def)
 
 foreign import ccall unsafe "HsXlib.h XAllocNamedColor"
         xAllocNamedColor :: Display -> Colormap -> CString ->
                 Ptr Color -> Ptr Color -> IO Status
 
 -- | interface to the X11 library function @XAllocColor()@.
-allocColor :: Display -> Colormap -> Color -> IO (MayFail Color)
+allocColor :: Display -> Colormap -> Color -> UnnamedMonad Color
 allocColor display colormap color =
-        with color $ \ color_ptr -> do
-        guardNotZero "allocColor" (
-                xAllocColor display colormap color_ptr
-            ) $ peek color_ptr
+        hoistWrapper1 (with color) $ \ color_ptr -> do
+        guardNotZero "allocColor"
+                $ xAllocColor display colormap color_ptr
+        liftIO $ peek color_ptr
 
 foreign import ccall unsafe "HsXlib.h XAllocColor"
         xAllocColor :: Display -> Colormap -> Ptr Color -> IO Status
 
 -- | interface to the X11 library function @XParseColor()@.
-parseColor :: Display -> Colormap -> String -> IO (MayFail Color)
+parseColor :: Display -> Colormap -> String -> UnnamedMonad Color
 parseColor display colormap color_spec =
-        withCString color_spec $ \ spec ->
-        alloca $ \ exact_def_return -> do
-        guardNotZero "parseColor" (
-                xParseColor display colormap spec exact_def_return
-            ) $ peek exact_def_return
+        hoistWrapper1 (withCString color_spec) $ \ spec ->
+        hoistWrapper1 alloca $ \ exact_def_return -> do
+        guardNotZero "parseColor"
+                $ xParseColor display colormap spec exact_def_return
+        liftIO $ peek exact_def_return
 
 foreign import ccall unsafe "HsXlib.h XParseColor"
         xParseColor :: Display -> Colormap -> CString -> Ptr Color -> IO Status

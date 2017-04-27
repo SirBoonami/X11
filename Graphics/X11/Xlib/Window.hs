@@ -150,20 +150,18 @@ foreign import ccall unsafe "HsXlib.h XCirculateSubwindows"
         circulateSubwindows          :: Display -> Window -> CirculationDirection -> IO ()
 
 -- | interface to the X11 library function @XIconifyWindow()@.
-iconifyWindow  :: Display -> Window -> ScreenNumber -> IO (MayFail ())
+iconifyWindow  :: Display -> Window -> ScreenNumber -> UnnamedMonad ()
 iconifyWindow display window screenno =
-        guardNotZero "iconifyWindow" (
-                xIconifyWindow display window screenno
-            ) $ return ()
+        guardNotZero "iconifyWindow"
+                $ xIconifyWindow display window screenno
 foreign import ccall unsafe "HsXlib.h XIconifyWindow"
         xIconifyWindow  :: Display -> Window -> ScreenNumber -> IO Status
 
 -- | interface to the X11 library function @XWithdrawWindow()@.
-withdrawWindow :: Display -> Window -> ScreenNumber -> IO (MayFail ())
+withdrawWindow :: Display -> Window -> ScreenNumber -> UnnamedMonad ()
 withdrawWindow display window screenno =
-        guardNotZero "withdrawWindow" (
-                xWithdrawWindow display window screenno
-            ) $ return ()
+        guardNotZero "withdrawWindow"
+                $ xWithdrawWindow display window screenno
 foreign import ccall unsafe "HsXlib.h XWithdrawWindow"
         xWithdrawWindow :: Display -> Window -> ScreenNumber -> IO Status
 

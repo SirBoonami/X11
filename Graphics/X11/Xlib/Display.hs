@@ -210,10 +210,10 @@ foreign import ccall unsafe "HsXlib.h XNoOp"
         noOp                    :: Display -> IO ()
 
 -- | interface to the X11 library function @XOpenDisplay()@.
-openDisplay :: String -> IO (MayFail Display)
+openDisplay :: String -> UnnamedMonad Display
 openDisplay name =
-        withCString name $ \ c_name ->
-        guardNotNull "openDisplay" (xOpenDisplay c_name) $ return . Display
+        hoistWrapper1 (withCString name) $ \ c_name ->
+        fmap Display $ guardNotNull "openDisplay" $ xOpenDisplay c_name
 foreign import ccall unsafe "HsXlib.h XOpenDisplay"
         xOpenDisplay :: CString -> IO (Ptr Display)
 

@@ -77,23 +77,22 @@ foreign import ccall unsafe "HsXlib.h XQueryFont"
 -- steaming shit.
 
 -- | interface to the X11 library function @XGetGCValues()@.
-fontFromGC :: Display -> GC -> IO (MayFail Font)
+fontFromGC :: Display -> GC -> UnnamedMonad Font
 fontFromGC display gc =
-	allocaBytes #{size XGCValues} $ \ values -> do
-	guardNotZero "fontFromGC" (
-		xGetGCValues display gc #{const GCFont} values
-		) $ #{peek XGCValues,font} values
+	hoistWrapper1 (allocaBytes #{size XGCValues}) $ \ values -> do
+	guardNotZero "fontFromGC"
+		$ xGetGCValues display gc #{const GCFont} values
+	liftIO $ #{peek XGCValues,font} values
 foreign import ccall unsafe "HsXlib.h XGetGCValues"
 	xGetGCValues :: Display -> GC -> ValueMask -> Ptr GCValues -> IO CInt
 
 type ValueMask = #{type unsigned long}
 
 -- | interface to the X11 library function @XLoadQueryFont()@.
-loadQueryFont :: Display -> String -> IO (MayFail FontStruct)
+loadQueryFont :: Display -> String -> UnnamedMonad FontStruct
 loadQueryFont display name =
-	withCString name $ \ c_name ->
-	guardNotNull "loadQueryFont" (xLoadQueryFont display c_name)
-	    $ return . FontStruct
+	hoistWrapper1 (withCString name) $ \ c_name ->
+	fmap FontStruct $ guardNotNull "loadQueryFont" (xLoadQueryFont display c_name)
 foreign import ccall unsafe "HsXlib.h XLoadQueryFont"
 	xLoadQueryFont :: Display -> CString -> IO (Ptr FontStruct)
 
