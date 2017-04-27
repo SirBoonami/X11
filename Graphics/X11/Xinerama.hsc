@@ -44,20 +44,18 @@ data XineramaScreenInfo = XineramaScreenInfo
 -- | Wrapper around xineramaQueryScreens that fakes a single screen when
 -- Xinerama is not active. This is the preferred interface to
 -- Graphics.X11.Xinerama.
-getScreenInfo :: Display -> IO (MayFail [Rectangle])
+getScreenInfo :: Display -> UnnamedMonad [Rectangle]
 getScreenInfo dpy = do
-    mxs <- xineramaQueryScreens dpy
+    mxs <- liftIO $ xineramaQueryScreens dpy
     case mxs of
-        Just xs -> return . Right . map xsiToRect $ xs
+        Just xs -> return . map xsiToRect $ xs
         Nothing -> do
-            mwa <- getWindowAttributes dpy (defaultRootWindow dpy)
-            case mwa of
-                Left  e  -> return $ Left e
-                Right wa -> return $ Right $ [Rectangle
-                                { rect_x      = fromIntegral $ wa_x wa
-                                , rect_y      = fromIntegral $ wa_y wa
-                                , rect_width  = fromIntegral $ wa_width wa
-                                , rect_height = fromIntegral $ wa_height wa }]
+            wa <- getWindowAttributes dpy (defaultRootWindow dpy)
+            return $ [Rectangle
+                { rect_x      = fromIntegral $ wa_x wa
+                , rect_y      = fromIntegral $ wa_y wa
+                , rect_width  = fromIntegral $ wa_width wa
+                , rect_height = fromIntegral $ wa_height wa }]
  where
     xsiToRect xsi = Rectangle
                     { rect_x        = fromIntegral $ xsi_x_org xsi

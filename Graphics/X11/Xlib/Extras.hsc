@@ -1004,9 +1004,10 @@ instance Storable WindowAttributes where
 foreign import ccall unsafe "XlibExtras.h XGetWindowAttributes"
     xGetWindowAttributes :: Display -> Window -> Ptr (WindowAttributes) -> IO Status
 
-getWindowAttributes :: Display -> Window -> IO (MayFail WindowAttributes)
-getWindowAttributes d w = alloca $ \p ->
-    guardNotZero "getWindowAttributes" (xGetWindowAttributes d w p) $ peek p
+getWindowAttributes :: Display -> Window -> UnnamedMonad WindowAttributes
+getWindowAttributes d w = hoistWrapper1 alloca $ \p -> do
+    guardNotZero "getWindowAttributes" (xGetWindowAttributes d w p)
+    liftIO $ peek p
 
 -- | interface to the X11 library function @XChangeWindowAttributes()@.
 foreign import ccall unsafe "XlibExtras.h XChangeWindowAttributes"
@@ -1042,23 +1043,23 @@ instance Storable TextProperty where
 foreign import ccall unsafe "XlibExtras.h XGetTextProperty"
     xGetTextProperty :: Display -> Window -> Ptr TextProperty -> Atom -> IO Status
 
-getTextProperty :: Display -> Window -> Atom -> IO (MayFail TextProperty)
+getTextProperty :: Display -> Window -> Atom -> UnnamedMonad TextProperty
 getTextProperty d w a =
-    alloca $ \textp ->
+    hoistWrapper1 alloca $ \textp -> do
         guardNotZero "getTextProperty" (xGetTextProperty d w textp a)
-            $ peek textp
+        liftIO $ peek textp
 
 foreign import ccall unsafe "XlibExtras.h XwcTextPropertyToTextList"
     xwcTextPropertyToTextList :: Display -> Ptr TextProperty -> Ptr (Ptr CWString) -> Ptr CInt -> IO CInt
 
-wcTextPropertyToTextList :: Display -> TextProperty -> IO (MayFail [String])
+wcTextPropertyToTextList :: Display -> TextProperty -> UnnamedMonad [String]
 wcTextPropertyToTextList d prop =
-    alloca    $ \listp  ->
-    alloca    $ \countp ->
-    with prop $ \propp  -> do
-        guard_ (success<=) "wcTextPropertyToTextList" (
-                xwcTextPropertyToTextList d propp listp countp
-            ) $ \_ -> do
+    hoistWrapper1 alloca      $ \listp  ->
+    hoistWrapper1 alloca      $ \countp ->
+    hoistWrapper1 (with prop) $ \propp  -> do
+        _ <- guardUnnamed_ (success<=) "wcTextPropertyToTextList"
+                $ xwcTextPropertyToTextList d propp listp countp
+        liftIO $ do
                 count <- peek countp
                 list  <- peek listp
                 texts <- flip mapM [0..fromIntegral count - 1] $ \i ->
@@ -1075,15 +1076,15 @@ newtype FontSet = FontSet (Ptr FontSet)
 foreign import ccall unsafe "XlibExtras.h XCreateFontSet"
     xCreateFontSet :: Display -> CString -> Ptr (Ptr CString) -> Ptr CInt -> Ptr CString -> IO (Ptr FontSet)
 
-createFontSet :: Display -> String -> IO (MayFail ([String], String, FontSet))
+createFontSet :: Display -> String -> UnnamedMonad ([String], String, FontSet)
 createFontSet d fn =
-    withCString fn $ \fontp  ->
-    alloca         $ \listp  ->
-    alloca         $ \countp ->
-    alloca         $ \defp   ->
-        guardNotNull "createFontSet" (
-                xCreateFontSet d fontp listp countp defp
-            ) $ \fs -> do
+    hoistWrapper1 (withCString fn) $ \fontp  ->
+    hoistWrapper1 alloca           $ \listp  ->
+    hoistWrapper1 alloca           $ \countp ->
+    hoistWrapper1 alloca           $ \defp   -> do
+        fs <- guardNotNull "createFontSet"
+                $ xCreateFontSet d fontp listp countp defp
+        liftIO $ do
                 count   <- peek countp
                 list    <- peek listp
                 missing <- flip mapM [0..fromIntegral count - 1] $ \i ->
@@ -1701,21 +1702,19 @@ foreign import ccall unsafe "HsXlib.h XMapRaised"
 foreign import ccall unsafe "HsXlib.h XGetCommand"
     xGetCommand :: Display -> Window -> Ptr (Ptr CWString) -> Ptr CInt -> IO Status
 
-getCommand :: Display -> Window -> IO (MayFail [String])
+getCommand :: Display -> Window -> UnnamedMonad [String]
 getCommand d w =
-  alloca $
-  \argvp ->
-  alloca $
-  \argcp ->
-  do
-    guard' (success>=) (\status -> "xGetCommand returned status: " ++ show status)
-        (xGetCommand d w argvp argcp) $ const $ do
-            argc <- peek argcp
-            argv <- peek argvp
-            texts <- flip mapM [0 .. fromIntegral $ pred argc]
-                   $ \i -> peekElemOff argv i >>= peekCWString
-            wcFreeStringList argv
-            return texts
+  hoistWrapper1 alloca $ \argvp ->
+  hoistWrapper1 alloca $ \argcp -> do
+    _ <- guardUnnamed (success>=) (\status -> "xGetCommand returned status: " ++ show status)
+        (xGetCommand d w argvp argcp)
+    liftIO $ do
+      argc <- peek argcp
+      argv <- peek argvp
+      texts <- flip mapM [0 .. fromIntegral $ pred argc]
+             $ \i -> peekElemOff argv i >>= peekCWString
+      wcFreeStringList argv
+      return texts
 
 foreign import ccall unsafe "HsXlib.h XGetModifierMapping"
     xGetModifierMapping :: Display -> IO (Ptr ())

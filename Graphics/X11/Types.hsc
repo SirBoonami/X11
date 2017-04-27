@@ -630,6 +630,7 @@ module Graphics.X11.Types
 
         -- ** Exception safety
         UnnamedMonad,
+        throwError,
         runUnnamedMonad,
         hoistUnnamedMonad,
         liftIO,
@@ -639,6 +640,7 @@ module Graphics.X11.Types
         guardNotNull,
         safely,
         hoistWrapper1,
+        unsafeUnnamed,
 
         -- ** WindowClass
         WindowClass,
@@ -1580,6 +1582,12 @@ safely a = liftIO (try a)
 hoistWrapper1 :: ((a -> IO (Either String b)) -> IO (Either String b))
               -> (a -> UnnamedMonad b) -> UnnamedMonad b
 hoistWrapper1 w f = hoistUnnamedMonad $ w $ runUnnamedMonad . f
+
+unsafeUnnamed :: UnnamedMonad a -> IO a
+unsafeUnnamed a = either
+                    (\err -> error $ "unsafeUnnamed failed: " ++ err)
+                    id
+               <$> runUnnamedMonad a
 
 type WindowClass        = CInt
 #{enum WindowClass,

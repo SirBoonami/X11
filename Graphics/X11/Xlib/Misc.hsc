@@ -296,7 +296,7 @@ foreign import ccall unsafe "HsXlib.h XUngrabServer"
 
 -- | interface to the X11 library function @XQueryBestTile()@.
 queryBestTile    :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (MayFail (Dimension, Dimension))
+                        UnnamedMonad (Dimension, Dimension)
 queryBestTile display which_screen width height =
         outParametersF2 (onZero "queryBestTile") $
                 xQueryBestTile display which_screen width height
@@ -306,7 +306,7 @@ foreign import ccall unsafe "HsXlib.h XQueryBestTile"
 
 -- | interface to the X11 library function @XQueryBestStipple()@.
 queryBestStipple :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (MayFail (Dimension, Dimension))
+                        UnnamedMonad (Dimension, Dimension)
 queryBestStipple display which_screen width height =
         outParametersF2 (onZero "queryBestStipple") $
                 xQueryBestStipple display which_screen width height
@@ -316,7 +316,7 @@ foreign import ccall unsafe "HsXlib.h XQueryBestStipple"
 
 -- | interface to the X11 library function @XQueryBestCursor()@.
 queryBestCursor  :: Display -> Drawable -> Dimension -> Dimension ->
-                        IO (MayFail (Dimension, Dimension))
+                        UnnamedMonad (Dimension, Dimension)
 queryBestCursor display d width height =
         outParametersF2 (onZero "queryBestCursor") $
                 xQueryBestCursor display d width height
@@ -327,7 +327,7 @@ foreign import ccall unsafe "HsXlib.h XQueryBestCursor"
 -- | interface to the X11 library function @XQueryBestSize()@.
 queryBestSize    :: Display -> QueryBestSizeClass -> Drawable ->
                         Dimension -> Dimension ->
-                        IO (MayFail (Dimension, Dimension))
+                        UnnamedMonad (Dimension, Dimension)
 queryBestSize display shape_class which_screen width height =
         outParametersF2 (onZero "queryBestSize") $
                 xQueryBestSize display shape_class which_screen width height
@@ -593,7 +593,7 @@ foreign import ccall unsafe "HsXlib.h XGeometry"
 
 -- | interface to the X11 library function @XGetGeometry()@.
 getGeometry :: Display -> Drawable ->
-        IO (MayFail (Window, Position, Position, Dimension, Dimension, Dimension, CInt))
+        UnnamedMonad (Window, Position, Position, Dimension, Dimension, Dimension, CInt)
 getGeometry display d =
         outParametersF7 (onZero "getGeometry") $
                 xGetGeometry display d
@@ -933,14 +933,14 @@ foreign import ccall unsafe "HsXlib.h XLookupString"
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XGetIconName()@.
-getIconName :: Display -> Window -> IO (MayFail String)
+getIconName :: Display -> Window -> UnnamedMonad String
 getIconName display w =
-        alloca $ \ icon_name_return ->
-        guardNotZero "getIconName" (
-                xGetIconName display w icon_name_return
-            ) $ do
-                    c_icon_name <- peek icon_name_return
-                    peekCString c_icon_name
+        hoistWrapper1 alloca $ \ icon_name_return -> do
+        guardNotZero "getIconName"
+                $ xGetIconName display w icon_name_return
+        liftIO $ do
+                c_icon_name <- peek icon_name_return
+                peekCString c_icon_name
 foreign import ccall unsafe "HsXlib.h XGetIconName"
         xGetIconName :: Display -> Window -> Ptr CString -> IO Status
 
@@ -1218,59 +1218,56 @@ foreign import ccall unsafe "HsXlib.h XDrawImageString"
 ----------------------------------------------------------------
 
 -- | interface to the X11 library function @XStoreBuffer()@.
-storeBuffer :: Display -> String -> CInt -> IO (MayFail ())
+storeBuffer :: Display -> String -> CInt -> UnnamedMonad ()
 storeBuffer display bytes buffer =
-        withCStringLen bytes $ \ (c_bytes, nbytes) ->
-        guardNotZero "storeBuffer" (
-                xStoreBuffer display c_bytes (fromIntegral nbytes) buffer
-            ) $ return ()
+        hoistWrapper1 (withCStringLen bytes) $ \ (c_bytes, nbytes) ->
+        guardNotZero "storeBuffer"
+                $ xStoreBuffer display c_bytes (fromIntegral nbytes) buffer
 foreign import ccall unsafe "HsXlib.h XStoreBuffer"
         xStoreBuffer :: Display -> CString -> CInt -> CInt -> IO Status
 
 -- | interface to the X11 library function @XStoreBytes()@.
-storeBytes :: Display -> String -> IO (MayFail ())
+storeBytes :: Display -> String -> UnnamedMonad ()
 storeBytes display bytes =
-        withCStringLen bytes $ \ (c_bytes, nbytes) ->
-        guardNotZero "storeBytes" (
-                xStoreBytes display c_bytes (fromIntegral nbytes)
-            ) $ return ()
+        hoistWrapper1 (withCStringLen bytes) $ \ (c_bytes, nbytes) ->
+        guardNotZero "storeBytes"
+                $ xStoreBytes display c_bytes (fromIntegral nbytes)
 foreign import ccall unsafe "HsXlib.h XStoreBytes"
         xStoreBytes :: Display -> CString -> CInt -> IO Status
 
 -- | interface to the X11 library function @XFetchBuffer()@.
-fetchBuffer :: Display -> CInt -> IO (MayFail String)
+fetchBuffer :: Display -> CInt -> UnnamedMonad String
 fetchBuffer display buffer =
-        alloca $ \ nbytes_return -> do
-        guardNotNull "fetchBuffer" (
-                xFetchBuffer display nbytes_return buffer
-            ) $ \c_bytes -> do
-                    nbytes <- peek nbytes_return
-                    bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
-                    _ <- xFree c_bytes
-                    return bytes
+        hoistWrapper1 alloca $ \ nbytes_return -> do
+        c_bytes <- guardNotNull "fetchBuffer"
+                $ xFetchBuffer display nbytes_return buffer
+        liftIO $ do
+                nbytes <- peek nbytes_return
+                bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
+                _ <- xFree c_bytes
+                return bytes
 foreign import ccall unsafe "HsXlib.h XFetchBuffer"
         xFetchBuffer :: Display -> Ptr CInt -> CInt -> IO CString
 
 -- | interface to the X11 library function @XFetchBytes()@.
-fetchBytes :: Display -> IO (MayFail String)
+fetchBytes :: Display -> UnnamedMonad String
 fetchBytes display =
-        alloca $ \ nbytes_return -> do
-        guardNotNull "fetchBytes" (
-                xFetchBytes display nbytes_return
-            ) $ \c_bytes -> do
-                    nbytes <- peek nbytes_return
-                    bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
-                    _ <- xFree c_bytes
-                    return bytes
+        hoistWrapper1 alloca $ \ nbytes_return -> do
+        c_bytes <- guardNotNull "fetchBytes"
+                $ xFetchBytes display nbytes_return
+        liftIO $ do
+                nbytes <- peek nbytes_return
+                bytes <- peekCStringLen (c_bytes, (fromIntegral nbytes))
+                _ <- xFree c_bytes
+                return bytes
 foreign import ccall unsafe "HsXlib.h XFetchBytes"
         xFetchBytes :: Display -> Ptr CInt -> IO CString
 
 -- | interface to the X11 library function @XRotateBuffers()@.
-rotateBuffers :: Display -> CInt -> IO (MayFail ())
+rotateBuffers :: Display -> CInt -> UnnamedMonad ()
 rotateBuffers display rot =
-        guardNotZero "rotateBuffers" (
-                xRotateBuffers display rot
-            ) $ return ()
+        guardNotZero "rotateBuffers"
+                $ xRotateBuffers display rot
 foreign import ccall unsafe "HsXlib.h XRotateBuffers"
         xRotateBuffers :: Display -> CInt -> IO Status
 
@@ -1308,83 +1305,83 @@ foreign import ccall unsafe "HsXlib.h XSetTextProperty"
 
 outParameters2 :: (Storable a, Storable b) =>
         (Ptr a -> Ptr b -> IO r) -> IO (a,b)
-outParameters2 fn = mayNotFail <$> outParametersF2 (const Nothing) fn
+outParameters2 fn = unsafeUnnamed $ outParametersF2 (const Nothing) fn
 
 outParametersF2 :: (Storable a, Storable b) =>
-        (r -> Maybe String) -> (Ptr a -> Ptr b -> IO r) -> IO (MayFail (a,b))
+        (r -> Maybe String) -> (Ptr a -> Ptr b -> IO r) -> UnnamedMonad (a,b)
 outParametersF2 check fn =
-        alloca $ \ a_return ->
-        alloca $ \ b_return -> do
-        r <- fn a_return b_return
+        hoistWrapper1 alloca $ \ a_return ->
+        hoistWrapper1 alloca $ \ b_return -> do
+        r <- liftIO $ fn a_return b_return
         case check r of
-            Just err -> return $ fail err
-            Nothing  -> do
+            Just err -> throwError err
+            Nothing  -> liftIO $ do
                 a <- peek a_return
                 b <- peek b_return
-                return $ return (a,b)
+                return (a,b)
 
 outParameters3 :: (Storable a, Storable b, Storable c) =>
         (Ptr a -> Ptr b -> Ptr c -> IO r) -> IO (a,b,c)
-outParameters3 fn = mayNotFail <$> outParametersF3 (const Nothing) fn
+outParameters3 fn = unsafeUnnamed $  outParametersF3 (const Nothing) fn
 
 outParametersF3 :: (Storable a, Storable b, Storable c) =>
         (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> IO r) ->
-        IO (MayFail (a,b,c))
+        UnnamedMonad (a,b,c)
 outParametersF3 check fn =
-        alloca $ \ a_return ->
-        alloca $ \ b_return ->
-        alloca $ \ c_return -> do
-        r <- fn a_return b_return c_return
+        hoistWrapper1 alloca $ \ a_return ->
+        hoistWrapper1 alloca $ \ b_return ->
+        hoistWrapper1 alloca $ \ c_return -> do
+        r <- liftIO $ fn a_return b_return c_return
         case check r of
-            Just err -> return $ fail err
-            Nothing  -> do
+            Just err -> throwError err
+            Nothing  -> liftIO $ do
                 a <- peek a_return
                 b <- peek b_return
                 c <- peek c_return
-                return $ return (a,b,c)
+                return (a,b,c)
 
 outParameters4 :: (Storable a, Storable b, Storable c, Storable d) =>
         (Ptr a -> Ptr b -> Ptr c -> Ptr d -> IO r) -> IO (a,b,c,d)
-outParameters4 fn = mayNotFail <$> outParametersF4 (const Nothing) fn
+outParameters4 fn = unsafeUnnamed $ outParametersF4 (const Nothing) fn
 
 outParametersF4 :: (Storable a, Storable b, Storable c, Storable d) =>
         (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> IO r) ->
-        IO (MayFail (a,b,c,d))
+        UnnamedMonad (a,b,c,d)
 outParametersF4 check fn =
-        alloca $ \ a_return ->
-        alloca $ \ b_return ->
-        alloca $ \ c_return ->
-        alloca $ \ d_return -> do
-        r <- fn a_return b_return c_return d_return
+        hoistWrapper1 alloca $ \ a_return ->
+        hoistWrapper1 alloca $ \ b_return ->
+        hoistWrapper1 alloca $ \ c_return ->
+        hoistWrapper1 alloca $ \ d_return -> do
+        r <- liftIO $ fn a_return b_return c_return d_return
         case check r of
-            Just err -> return $ fail err
-            Nothing  -> do
+            Just err -> throwError err
+            Nothing  -> liftIO $ do
                 a <- peek a_return
                 b <- peek b_return
                 c <- peek c_return
                 d <- peek d_return
-                return $ return (a,b,c,d)
+                return (a,b,c,d)
 
 outParameters7 :: (Storable a, Storable b, Storable c, Storable d, Storable e, Storable f, Storable g) =>
         (Ptr a -> Ptr b -> Ptr c -> Ptr d -> Ptr e -> Ptr f -> Ptr g -> IO r) ->
         IO (a,b,c,d,e,f,g)
-outParameters7 fn = mayNotFail <$> outParametersF7 (const Nothing) fn
+outParameters7 fn = unsafeUnnamed $  outParametersF7 (const Nothing) fn
 
 outParametersF7 :: (Storable a, Storable b, Storable c, Storable d, Storable e, Storable f, Storable g) =>
         (r -> Maybe String) -> (Ptr a -> Ptr b -> Ptr c -> Ptr d -> Ptr e -> Ptr f -> Ptr g -> IO r) ->
-        IO (MayFail (a,b,c,d,e,f,g))
+        UnnamedMonad (a,b,c,d,e,f,g)
 outParametersF7 check fn =
-        alloca $ \ a_return ->
-        alloca $ \ b_return ->
-        alloca $ \ c_return ->
-        alloca $ \ d_return ->
-        alloca $ \ e_return ->
-        alloca $ \ f_return ->
-        alloca $ \ g_return -> do
-        r <- fn a_return b_return c_return d_return e_return f_return g_return
+        hoistWrapper1 alloca $ \ a_return ->
+        hoistWrapper1 alloca $ \ b_return ->
+        hoistWrapper1 alloca $ \ c_return ->
+        hoistWrapper1 alloca $ \ d_return ->
+        hoistWrapper1 alloca $ \ e_return ->
+        hoistWrapper1 alloca $ \ f_return ->
+        hoistWrapper1 alloca $ \ g_return -> do
+        r <- liftIO $ fn a_return b_return c_return d_return e_return f_return g_return
         case check r of
-            Just err -> return $ fail err
-            Nothing  -> do
+            Just err -> throwError err
+            Nothing  -> liftIO $ do
                 a <- peek a_return
                 b <- peek b_return
                 c <- peek c_return
@@ -1392,7 +1389,7 @@ outParametersF7 check fn =
                 e <- peek e_return
                 f <- peek f_return
                 g <- peek g_return
-                return $ return (a,b,c,d,e,f,g)
+                return (a,b,c,d,e,f,g)
 
 -- |Helper for @outParamsF*@. Returns `Just` the string if the status is zero
 -- and `Nothing` otherwise.
